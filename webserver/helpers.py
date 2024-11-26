@@ -49,15 +49,15 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
     def handle(self):
         while True:
             # Loop to have every user choose a unique username
-            self.request.sendall("Enter username:".encode())
+            self.request.sendall("Enter username:\n".encode())
             username = self.request.recv(1024).strip().decode()
             with self.user_lock:
                 if username not in self.server_users:
                     self.server_users.add(username)
-                    self.request.sendall(f"Welcome to the server, {username}".encode())
+                    self.request.sendall(f"Welcome to the server, {username}\n".encode())
                     break
                 else:
-                    self.request.sendall(f"{username} is already in the server, please choose another username.".encode())
+                    self.request.sendall(f"{username} is already in the server, please choose another username.\n".encode())
 
         # Ensures that a user may not access any message in a group that they are not a part of
         # TODO: extend to all groups
@@ -77,19 +77,20 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
                 # Splitting the command into the named command and the arguments passed to it
                 method = command.split(" ")[0]
                 args = command.split(" ")[1:]
+                args = [arg.replace("\n", "") for arg in args]
                 try:
                     # Try to use the command with the arguments provided
                     getattr(self, method)(*args)
                 except AttributeError:
                     # If the provided command does not exist
-                    self.request.sendall("Invalid command!".encode())
+                    self.request.sendall("Invalid command!\n".encode())
                 except TypeError:
                     # If the arguments to the command are invalid
-                    self.request.sendall(f"Invalid arguments for {method}!".encode())
+                    self.request.sendall(f"Invalid arguments for {method}!\n".encode())
                 except Exception:
                     # If some other error occurred (typically inside the command's function)
                     # TODO: Provide a more useful error message to help the client out?
-                    self.request.sendall("An error has occurred, please try again.".encode())
+                    self.request.sendall("An error has occurred, please try again.\n".encode())
 
         except Exception as e:
             # For the client leaving the server for any other reason
@@ -104,7 +105,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
             self.groups["public"].add_user(self.username)
         # Allowing the user to access the last and second to last most recently added bulletin messages
         self.message_cutoff["public"] = self.groups["public"].max_idx() - 1
-        self.request.sendall(f"You have joined the {group_name} group!".encode())
+        self.request.sendall(f"You have joined the {group_name} group!\n".encode())
 
     def message(self, message_idx):
         # Displaying messages
@@ -112,15 +113,15 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         message_idx = int(message_idx)
         if self.message_cutoff["public"] < -1:
             # The user is not a part of the group
-            self.request.sendall(f"Cannot access messages from group 'public'. Consider joining the group?".encode())
+            self.request.sendall(f"Cannot access messages from group 'public'. Consider joining the group?\n".encode())
             return
         if not message_idx >= self.message_cutoff["public"]:
             # The user is trying to access a message that was added more than 2 posts ago
-            self.request.sendall(f"Sorry, message {message_idx} cannot be accessed.".encode())
+            self.request.sendall(f"Sorry, message {message_idx} cannot be accessed.\n".encode())
             return
         if message_idx >= len(self.groups["public"].bulletin):
             # The user is trying to access messages with indices that do not yet exist
-            self.request.sendall(f"Message {message_idx} does not exist.".encode())
+            self.request.sendall(f"Message {message_idx} does not exist.\n".encode())
             return
         subject, body = self.groups['public'][message_idx]
         self.request.send(f"{subject}\n{body}".encode())
@@ -130,17 +131,17 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         # TODO: Extend to multiple groups
         if self.username not in self.groups["public"].users:
             # The user is not in the group
-            self.request.sendall("Cannot post to group 'public'. Consider joining the group?".encode())
+            self.request.sendall("Cannot post to group 'public'. Consider joining the group?\n".encode())
             return
         # Providing separate prompts for subject and body
-        self.request.sendall("Enter message subject:".encode())
+        self.request.sendall("Enter message subject:\n".encode())
         message_subject = self.request.recv(1024).decode()
-        self.request.sendall("Enter message body:".encode())
+        self.request.sendall("Enter message body:\n".encode())
         message_body = self.request.recv(1024).decode()
         with self.group_lock:
             # Adding the message
             self.groups["public"].add_message((message_subject, message_body))
-        self.request.sendall("Message posted!".encode())
+        self.request.sendall("Message posted!\n".encode())
 
     def users(self):
         # Displaying the users within a group
@@ -150,7 +151,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
             self.request.sendall(users.encode())
             return
         # Case for there being no users
-        self.request.sendall("No users in public.".encode())
+        self.request.sendall("No users in public.\n".encode())
 
     def leave(self):
         # Leaving a group
@@ -158,7 +159,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         with self.group_lock:
             self.groups["public"].users.remove(self.username)
         self.message_cutoff["public"] = -2
-        self.request.sendall("Successfully left group 'public'".encode())
+        self.request.sendall("Successfully left group 'public'\n".encode())
 
     # TODO: Add clean-up method to remove users not in the server from all groups (I think?)
 
