@@ -5,25 +5,44 @@ public class SocketClient {
     public static void main(String[] args) {
         try (
             Socket socket = new Socket("localhost", 9999);
-            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
             BufferedReader console = new BufferedReader(new InputStreamReader(System.in))
-        ){
-            //Read the initial message from the server
-            System.out.println(in.readLine());
+        ) {
+            // Read the initial message from the server
+            System.out.println(readFullMessage(in));
 
-            //Main loop
-            while(true){
+            // Main loop
+            while (true) {
                 System.out.print("> ");
-                //Read the command from the user's input
                 String command = console.readLine();
-                //Sent the command to the server
                 out.println(command);
-                //Print the server's response
-                System.out.println(in.readLine());
+                System.out.println(readFullMessage(in)); // Read server response
             }
-        } catch (IOException e){
+        } catch (IOException e) {
             System.err.println("Connection error: " + e.getMessage());
         }
+    }
+
+    // Helper method to read a full message until <END>
+    private static String readFullMessage(BufferedInputStream in) throws IOException {
+        StringBuilder message = new StringBuilder();
+        byte[] buffer = new byte[1024];
+        int bytesRead;
+        String chunk;
+
+        while ((bytesRead = in.read(buffer)) != -1) {
+            chunk = new String(buffer, 0, bytesRead);
+            message.append(chunk);
+
+            // Check if the <END> delimiter is present
+            if (message.toString().contains("<END>")) {
+                break;
+            }
+        }
+
+        // Remove the <END> delimiter before returning
+        String result = message.toString();
+        return result.substring(0, result.indexOf("<END>"));
     }
 }
