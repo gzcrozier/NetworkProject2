@@ -151,6 +151,8 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         self.request.sendall("Message posted!<END>".encode())
 
     def users(self):
+        # TODO: This sends nothing if the user is in no groups
+
         # Displaying the users within a group
         # TODO: Extend to multiple groups
         users = ("\n".join(self.groups["public"].users))
