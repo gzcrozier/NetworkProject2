@@ -1,26 +1,29 @@
-from socketserver import ThreadingMixIn, TCPServer, BaseRequestHandler
+from typing import List, Optional, Set, Dict, Tuple
+from socketserver import ThreadingMixIn, TCPServer, BaseRequestHandler, BaseServer
 import threading
+from socket import socket as Socket
+
 
 
 class Group:
     def __init__(self, name):
         self.name = name
-        self.bulletin = []
-        self.users = set()
+        self.bulletin: List[str] = []
+        self.users: Set[str] = set()
 
     def add_user(self, username):
         self.users.add(username)
 
-    def add_message(self, message):
+    def add_message(self, message: str):
         self.bulletin.append(message)
 
-    def __getitem__(self, message_idx):
+    def __getitem__(self, message_idx: int) -> str:
         return self.bulletin[message_idx]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.bulletin)
 
-    def max_idx(self):
+    def max_idx(self) -> int:
         return max(len(self) - 1, 0)
 
 
@@ -31,17 +34,27 @@ class ThreadedTCPServer(ThreadingMixIn, TCPServer):
 class ThreadedTCPRequestHandler(BaseRequestHandler):
     """
     """
-    groups = {"public": Group("public")}  # Defining all groups up-front
-    group_lock = threading.Lock()  # Need to use locks to make any writes to groups or users
-    server_users = set()  # Set of users currently on the server
+    # Define the groups available to users on the server. This lock will be used to ensure no simultaneous access.
+    group_lock = threading.Lock()
+    groups: Dict[str, Group] = {
+        "public": Group("public"),
+        "group1": Group("group1"),
+        "group2": Group("group2"),
+        "group3": Group("group3"),
+        "group4": Group("group4"),
+        "group5": Group("group5"),
+    }
+    # Define the list to store our server's users. This lock will be used to ensure no simultaneous access.
     user_lock = threading.Lock()
+    server_users: Set[str] = set()
+    
+    # Type hint these here so the LSP can see it.
+    request: Socket
+    server: BaseServer
+    client_address: Tuple[str, int]
+    username: Optional[str]
 
-    # TODO: Remove these, they are used for testing
-    groups["public"].add_message(("Message 0 Subject", "Message 0 Body"))
-    groups["public"].add_message(("Message 1 Subject", "Message 1 Body"))
-    groups["public"].add_message(("Message 2 Subject", "Message 2 Body"))
-
-    def __init__(self, request, client_address, server):
+    def __init__(self, request: Socket, client_address, server: BaseServer):
         super().__init__(request, client_address, server)
         self.username = None  # The username for the connected client
         self.message_cutoff = None  # Used to keep track of the "last two message" aspect
@@ -49,7 +62,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
     def handle(self):
         while True:
             # Loop to have every user choose a unique username
-            self.request.sendall("Enter username:<END>".encode())
+            self.request.sendall(b"Enter username:<END>")
             username = self.request.recv(1024).strip().decode()
             with self.user_lock:
                 if username not in self.server_users:
@@ -67,7 +80,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         try:
             while True:
                 # Loop to accept and serve commands from clients
-                command = self.request.recv(1024).decode()
+                command: str = self.request.recv(1024).decode()
                 if command.strip() == "exit":
                     # Command to exit the server
                     with self.user_lock:
@@ -76,10 +89,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
                     raise KeyboardInterrupt
 
                 # Splitting the command into the named command and the arguments passed to it
-                method = command.split(" ")[0]
-                method = method.replace("\n", "")
-                args = command.split(" ")[1:]
-                args = [arg.replace("\n", "") for arg in args]
+                method, *args = command.replace("\n", "").split(" ")
                 try:
                     # Try to use the command with the arguments provided
                     getattr(self, method)(*args)
@@ -100,17 +110,19 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
             self.server_users.remove(username)
             pass
 
-    def join(self, group_name):
+    def join(self, group_name: str):
         # Joining a group
-        # TODO: Extend to multiple groups
         with self.group_lock:
-            # Adding the username to the group
-            self.groups["public"].add_user(self.username)
-        # Allowing the user to access the last and second to last most recently added bulletin messages
-        self.message_cutoff["public"] = self.groups["public"].max_idx() - 1
-        self.request.sendall(f"You have joined the {group_name} group! <END>".encode())
+            if group_name in self.groups:
+                self.groups[group_name].add_user(self.username)
 
-    def message(self, message_idx):
+                # Allowing the user to access the last and second to last most recently added bulletin messages
+                self.message_cutoff[group_name] = self.groups[group_name].max_idx() - 1
+                self.request.sendall(f"You have joined the {group_name} group! <END>".encode())
+            else:
+                self.request.sendall(f"The group {group_name} does not exist. <END>".encode())
+
+    def message(self, message_idx: int):
         # Displaying messages
         # TODO: Extend to multiple groups
         message_idx = int(message_idx)
