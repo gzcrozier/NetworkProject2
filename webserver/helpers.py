@@ -82,7 +82,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
 
         # Ensures that a user may not access any message in a group that they are not a part of
         # TODO: extend to all groups
-        self.message_cutoff = {"public": -2}
+        self.message_cutoff = {g: -2 for g in self.groups}
         self.username = username
         self.my_groups = set()
 
@@ -125,10 +125,11 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
                 self.clients.pop(self.username)
             pass
 
-    def _announce(self, message: str, users: Sequence[str], sender: str):
+    def _announce(self, message: str, users: Set[str], sender: str):
         # Sending messages to users
         for user in users:
             if user == sender:
+                # Don't really need to announce it to the user who sends it
                 continue
             self.clients[user].request.sendall(f"{message}<END>".encode())
 
@@ -203,12 +204,11 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
     def leave(self):
         # Leaving a group
         # TODO: Extend to multiple groups
-        self._leave()
+        self._leave("public")
         self.request.sendall("Successfully left group 'public'<END>".encode())
 
-    def _leave(self):
-        # Leaving a group (internal method)
-        # TODO: Extend to multiple groups
+    def _leave(self, groupname: str):
+        # Leaving a group
         with self.group_lock:
             for g in self.my_groups:
                 self.groups[g].users.remove(self.username)
