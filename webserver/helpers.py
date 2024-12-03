@@ -102,7 +102,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
                 # Splitting the command into the named command and the arguments passed to it
                 method, *args = command.replace("\n", "").split(" ")
                 try:
-                    if "_" in method:
+                    if "_" in method or method == "handle":
                         # Client cannot run internal commands
                         raise AttributeError
                     # Try to use the command with the arguments provided
@@ -261,6 +261,5 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         if self.username not in self.available_groups[groupname].users:
             return
         with self.group_lock:
-            for g in self.my_groups:
-                self.available_groups[g].users.remove(self.username)
+            self.available_groups[groupname].users.remove(self.username)
         self.message_cutoff[groupname] = -2
