@@ -35,6 +35,8 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
     group_lock = threading.Lock()  # Need to use locks to make any writes to groups or users
     server_users = set()  # Set of users currently on the server
     user_lock = threading.Lock()
+    clients = []  # Holds all clients for broadcasting
+    client_lock = threading.Lock()
 
     # TODO: Remove these, they are used for testing
     groups["public"].add_message(("Message 0 Subject", "Message 0 Body"))
@@ -47,6 +49,8 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         self.message_cutoff = None  # Used to keep track of the "last two message" aspect
 
     def handle(self):
+        with self.client_lock:
+            self.clients.append(self)
         while True:
             # Loop to have every user choose a unique username
             self.request.sendall("Enter username:<END>".encode())
@@ -97,7 +101,8 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         except Exception as e:
             # For the client leaving the server for any other reason
             self._leave()
-            self.server_users.remove(username)
+            with self.user_lock:
+                self.server_users.remove(username)
             pass
 
     def join(self, group_name):
@@ -132,6 +137,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
     def post(self):
         # Posting to a bulletin
         # TODO: Extend to multiple groups
+        # TODO: Find out all how to send all necessary broadcast info to all users
         if self.username not in self.groups["public"].users:
             # The user is not in the group
             self.request.sendall("Cannot post to group 'public'. Consider joining the group?<END>".encode())
