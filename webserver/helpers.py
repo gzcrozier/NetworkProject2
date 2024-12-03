@@ -1,4 +1,4 @@
-from typing import List, Optional, Set, Dict, Tuple
+from typing import List, Optional, Set, Dict, Tuple, Sequence
 from socketserver import ThreadingMixIn, TCPServer, BaseRequestHandler, BaseServer
 import threading
 from socket import socket as Socket
@@ -53,7 +53,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
     server: BaseServer
     client_address: Tuple[str, int]
     username: Optional[str]
-    clients = []  # Holds all clients for broadcasting
+    clients = {}  # Holds all clients for broadcasting
     client_lock = threading.Lock()
 
     # TODO: Remove these, they are used for testing
@@ -65,10 +65,9 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         super().__init__(request, client_address, server)
         self.username = None  # The username for the connected client
         self.message_cutoff = None  # Used to keep track of the "last two message" aspect
+        self.my_groups = None
 
     def handle(self):
-        with self.client_lock:
-            self.clients.append(self)
         while True:
             # Loop to have every user choose a unique username
             self.request.sendall("Enter username:<END>".encode())
@@ -79,12 +78,16 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
                     self.request.sendall(f"Welcome to the server, {username}<END>".encode())
                     break
                 else:
-                    self.request.sendall(f"{username} is already in the server, please choose another username.<END>".encode())
+                    self.request.sendall(f"{username} is already in the server, please choose another username.\n<END>".encode())
 
         # Ensures that a user may not access any message in a group that they are not a part of
         # TODO: extend to all groups
         self.message_cutoff = {"public": -2}
         self.username = username
+        self.my_groups = set()
+
+        with self.client_lock:
+            self.clients[self.username] = self
 
         try:
             while True:
@@ -117,20 +120,31 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
             # For the client leaving the server for any other reason
             self._leave()
             with self.user_lock:
-                self.server_users.remove(username)
+                self.server_users.remove(self.username)
+            with self.client_lock:
+                self.clients.pop(self.username)
             pass
 
-    def join(self, group_name: str):
-        # Joining a group
-        with self.group_lock:
-            if group_name in self.groups:
-                self.groups[group_name].add_user(self.username)
+    def _announce(self, message: str, users: Sequence[str], sender: str):
+        # Sending messages to users
+        for user in users:
+            if user == sender:
+                continue
+            self.clients[user].request.sendall(f"{message}<END>".encode())
 
-                # Allowing the user to access the last and second to last most recently added bulletin messages
-                self.message_cutoff[group_name] = self.groups[group_name].max_idx() - 1
-                self.request.sendall(f"You have joined the {group_name} group! <END>".encode())
-            else:
-                self.request.sendall(f"The group {group_name} does not exist. <END>".encode())
+    def join(self):
+        # Joining the public group
+        with self.group_lock:
+            self.groups["public"].add_user(self.username)
+
+        # Allowing the user to access the last and second to last most recently added bulletin messages
+        self.my_groups.add("public")
+        self.message_cutoff["public"] = self.groups["public"].max_idx() - 1
+        self.request.sendall(f"You have joined the public group! <END>".encode())
+
+        self._announce(f"{self.username} has joined the public group!",
+                       self.groups["public"].users,
+                       self.username)
 
     def message(self, message_idx: int):
         # Displaying messages
@@ -196,7 +210,8 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         # Leaving a group (internal method)
         # TODO: Extend to multiple groups
         with self.group_lock:
-            self.groups["public"].users.remove(self.username)
+            for g in self.my_groups:
+                self.groups[g].users.remove(self.username)
         self.message_cutoff["public"] = -2
 
     # TODO: Add clean-up method to remove users not in the server from all groups (I think?)

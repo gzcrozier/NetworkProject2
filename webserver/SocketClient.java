@@ -53,21 +53,37 @@ public class SocketClient {
         String message, response;
         BufferedReader consoleReader = new BufferedReader((new InputStreamReader(System.in)));
 
+        Thread serverListener = new Thread(() -> {
+            // Thread to listen for announcments and display them, then continue
+            try {
+                while (true) {
+                    String serverMessage = readMessage();
+                    if (serverMessage == null) continue; 
+                    System.out.println("\n" + serverMessage);
+                    System.out.print("> "); // Reprint prompt for user input
+                }
+            } catch (IOException e) {
+                System.err.println("Error reading from server: " + e.getMessage());
+            }
+        });
+
+        serverListener.start();
+
         try {
+            System.out.print("> ");
             while (true) {
                 // Read a line (command) from the terminal.
-                System.out.print("> ");
                 message = consoleReader.readLine();
                 
                 // Check that the use gave a command.
-                if (message.isBlank()) break;
+                if (message.isBlank()) continue;
 
                 // If we get to this point the user gave a command we need to send to the server.
                 this.sendMessage(message);
 
-                // Read updates from the server.
-                response = this.readMessage();
-                System.out.println(response);
+                // // Read updates from the server.
+                // response = this.readMessage();
+                // System.out.println(response);
             }
         } catch (IOException e) {
             System.err.println("Error reading the message from the terminal: " + e.getMessage());
