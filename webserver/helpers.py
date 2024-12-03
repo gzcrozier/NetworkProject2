@@ -59,7 +59,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
     server: BaseServer
     client_address: Tuple[str, int]
     username: Optional[str]
-    clients = {}  # Holds all clients for broadcasting
+    clients: Dict[str, "ThreadedTCPRequestHandler"] = {}
     client_lock = threading.Lock()
 
     # TODO: Remove these, they are used for testing
@@ -136,7 +136,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
                 continue
             self.clients[user].request.sendall(f"{message}<END>".encode())
 
-    def get_group(self, groupname: str) -> tuple[Group, str]:
+    def get_group(self, groupname: str) -> Tuple[Group, str]:
         try:
             # Try to use groupname to index into available_groups
             group = self.available_groups[groupname]
@@ -154,7 +154,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
     def groupjoin(self, groupname: str):
         # TODO: Logic for if group does not exist
         # Joining a group
-        group, gropuname = self.get_group(groupname)
+        group, groupname = self.get_group(groupname)
         with self.group_lock:
             group.add_user(self.username)
 
@@ -250,6 +250,18 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         self.request.sendall(f"Successfully left '{groupname}'<END>".encode())
         announcement = f"{self.username} has left the {groupname} group!\n"
         self._announce(announcement, group.users, self.username)
+
+    def usergroupinfo(self, groupname: str):
+        # Gets the group info specific to the user.
+        with self.group_lock:
+            group, groupname = self.get_group(groupname)
+            message: str = (
+                f"Group: {groupname}\n"\
+                f"Users: [{', '.join(group.users)}]\n"\
+                f"Messages: {len(group)}\n"\
+                f"Cutoff: {self.message_cutoff[groupname]}\n"
+            )
+            self.request.sendall(message.encode())
 
     leave = partialmethod(groupleave, "public")
 
