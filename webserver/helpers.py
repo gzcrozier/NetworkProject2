@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional, Set, Dict, Tuple, Sequence
 from socketserver import ThreadingMixIn, TCPServer, BaseRequestHandler, BaseServer
 import threading
@@ -57,9 +58,9 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
     client_lock = threading.Lock()
 
     # TODO: Remove these, they are used for testing
-    groups["public"].add_message(("Message 0 Subject", "Message 0 Body"))
-    groups["public"].add_message(("Message 1 Subject", "Message 1 Body"))
-    groups["public"].add_message(("Message 2 Subject", "Message 2 Body"))
+    groups["public"].add_message("Message 0 Body")
+    groups["public"].add_message("Message 1 Body")
+    groups["public"].add_message("Message 2 Body")
 
     def __init__(self, request: Socket, client_address, server: BaseServer):
         super().__init__(request, client_address, server)
@@ -97,7 +98,8 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
                     # Command to exit the server
                     with self.user_lock:
                         self.server_users.remove(self.username)
-                    self._leave()
+                    for g in self.my_groups:
+                        self._leave(g)
                     raise KeyboardInterrupt
 
                 # Splitting the command into the named command and the arguments passed to it
@@ -118,7 +120,8 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
 
         except Exception as e:
             # For the client leaving the server for any other reason
-            self._leave()
+            for g in self.groups:
+                self._leave(g)
             with self.user_lock:
                 self.server_users.remove(self.username)
             with self.client_lock:
@@ -149,7 +152,6 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
 
     def message(self, message_idx: int):
         # Displaying messages
-        # TODO: Extend to multiple groups
         message_idx = int(message_idx)
         if self.message_cutoff["public"] < -1:
             # The user is not a part of the group
@@ -163,12 +165,11 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
             # The user is trying to access messages with indices that do not yet exist
             self.request.sendall(f"Message {message_idx} does not exist.<END>".encode())
             return
-        subject, body = self.groups['public'][message_idx]
-        self.request.send(f"{subject}\n{body}<END>".encode())
+        body = self.groups['public'][message_idx]
+        self.request.send(f"{body}<END>".encode())
 
     def post(self):
         # Posting to a bulletin
-        # TODO: Extend to multiple groups
         # TODO: Find out all how to send all necessary broadcast info to all users
         if self.username not in self.groups["public"].users:
             # The user is not in the group
@@ -185,14 +186,21 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
 
         with self.group_lock:
             # Adding the message
-            self.groups["public"].add_message((message_subject, message_body))
+            self.groups["public"].add_message(message_body)
         self.request.sendall("Message posted!<END>".encode())
+        # Announcing the message to all group members
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        announcement = (f"Message ID: {self.groups['public'].max_idx()}\n"
+                        f"From: {self.username}\n"
+                        f"Time: {now}\n"
+                        f"Subject: {message_subject}\n"
+                        f"<END>")
+        self._announce(announcement, self.groups["public"].users, self.username)
 
     def users(self):
         # TODO: This sends nothing if the user is in no groups
 
         # Displaying the users within a group
-        # TODO: Extend to multiple groups
         users = ("\n".join(self.groups["public"].users))
         users = users + "<END>"
         if users:
@@ -203,7 +211,6 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
 
     def leave(self):
         # Leaving a group
-        # TODO: Extend to multiple groups
         self._leave("public")
         self.request.sendall("Successfully left group 'public'<END>".encode())
 
