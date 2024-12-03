@@ -50,7 +50,7 @@ public class SocketClient {
     }
 
     public void loop() {
-        String message, response;
+        String message;
         BufferedReader consoleReader = new BufferedReader((new InputStreamReader(System.in)));
 
         Thread serverListener = new Thread(() -> {
@@ -78,12 +78,13 @@ public class SocketClient {
                 // Check that the use gave a command.
                 if (message.isBlank()) continue;
 
+                // User calls exit
+                if (message.equalsIgnoreCase("exit")) {
+                    break;
+                }
+
                 // If we get to this point the user gave a command we need to send to the server.
                 this.sendMessage(message);
-
-                // // Read updates from the server.
-                // response = this.readMessage();
-                // System.out.println(response);
             }
         } catch (IOException e) {
             System.err.println("Error reading the message from the terminal: " + e.getMessage());
