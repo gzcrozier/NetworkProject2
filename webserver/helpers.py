@@ -146,7 +146,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
 
         self._announce(announcement, self.available_groups["public"].users, self.username)
 
-    def group_join(self, groupname: str):
+    def groupjoin(self, groupname: str):
         # Joining a group
         with self.group_lock:
             self.groups[groupname].add_user(self.username)
@@ -178,7 +178,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         body = self.available_groups['public'][message_idx]
         self.request.send(f"{body}<END>".encode())
 
-    def group_message(self, groupname: str, message_idx: int):
+    def groupmessage(self, groupname: str, message_idx: int):
         # Displaying messages
         message_idx = int(message_idx)
         if self.message_cutoff[groupname] < -1:
@@ -212,7 +212,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         message_body = self.request.recv(1024).decode()
         message_body = message_body.replace("\n", "")
 
-    def group_post(self, groupname: str):
+    def grouppost(self, groupname: str):
         # Posting to a bulletin
         # TODO: Find out all how to send all necessary broadcast info to all users
         if self.username not in self.groups[groupname].users:
@@ -252,7 +252,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
             self.request.sendall(users.encode())
             return
 
-    def group_users(self, groupname: str):
+    def groupusers(self, groupname: str):
         # TODO: This sends nothing if the user is in no groups
 
         # Displaying the users within a group
@@ -267,7 +267,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         self._leave("public")
         self.request.sendall(f"Successfully left the group 'public'<END>".encode())
 
-    def group_leave(self, groupname: str):
+    def groupleave(self, groupname: str):
         # Leaving a group
         self._leave(groupname)
         self.request.sendall(f"Successfully left {groupname}<END>".encode())
