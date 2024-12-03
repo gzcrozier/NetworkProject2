@@ -262,16 +262,6 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
             self.request.sendall(users.encode())
             return
 
-    def group_users(self, groupname: str):
-        # TODO: This sends nothing if the user is in no groups
-
-        # Displaying the users within a group
-        users = ("\n".join(self.groups[groupname].users))
-        users = users + "<END>"
-        if users:
-            self.request.sendall(users.encode())
-            return
-
     def leave(self):
         # Leaving a group
         self._leave("public")
