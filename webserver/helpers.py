@@ -146,6 +146,20 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
 
         self._announce(announcement, self.available_groups["public"].users, self.username)
 
+    def group_join(self, groupname: str):
+        # Joining a group
+        with self.group_lock:
+            self.groups[groupname].add_user(self.username)
+
+        # Allowing the user to access the last and second to last most recently added bulletin messages
+        self.my_groups.add(groupname)
+        self.message_cutoff[groupname] = self.groups[groupname].max_idx() - 1
+        self.request.sendall(f"You have joined {groupname}! <END>".encode())
+
+        self._announce(f"{self.username} has joined {groupname}!",
+                       self.groups[groupname].users,
+                       self.username)
+        
     def message(self, message_idx: int):
         # Displaying messages
         message_idx = int(message_idx)
@@ -164,6 +178,24 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         body = self.available_groups['public'][message_idx]
         self.request.send(f"{body}<END>".encode())
 
+    def group_message(self, groupname: str, message_idx: int):
+        # Displaying messages
+        message_idx = int(message_idx)
+        if self.message_cutoff[groupname] < -1:
+            # The user is not a part of the group
+            self.request.sendall(f"Cannot access messages from {groupname}. Consider joining the group?<END>".encode())
+            return
+        if not message_idx >= self.message_cutoff[groupname]:
+            # The user is trying to access a message that was added more than 2 posts ago
+            self.request.sendall(f"Sorry, message {message_idx} cannot be accessed.<END>".encode())
+            return
+        if message_idx >= len(self.groups[groupname].bulletin):
+            # The user is trying to access messages with indices that do not yet exist
+            self.request.sendall(f"Message {message_idx} does not exist.<END>".encode())
+            return
+        body = self.groups[groupname][message_idx]
+        self.request.send(f"{body}<END>".encode())
+
     def post(self):
         # Posting to a bulletin
         # TODO: Find out all how to send all necessary broadcast info to all users
@@ -180,17 +212,34 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         message_body = self.request.recv(1024).decode()
         message_body = message_body.replace("\n", "")
 
+    def group_post(self, groupname: str):
+        # Posting to a bulletin
+        # TODO: Find out all how to send all necessary broadcast info to all users
+        if self.username not in self.groups[groupname].users:
+            # The user is not in the group
+            self.request.sendall(f"Cannot post to group {groupname}. Consider joining the group?<END>".encode())
+            return
+        # Providing separate prompts for subject and body
+        self.request.sendall("Enter message subject:<END>".encode())
+        message_subject = self.request.recv(1024).decode()
+        message_subject = message_subject.replace("\n", "")  # Java client adds newlines to everything, removing them
+
+        self.request.sendall("Enter message body:<END>".encode())
+        message_body = self.request.recv(1024).decode()
+        message_body = message_body.replace("\n", "")
+
         with self.group_lock:
             # Adding the message
-            self.available_groups["public"].add_message(message_body)
+            self.groups["public"].add_message(message_body)
         self.request.sendall("Message posted!<END>".encode())
         # Announcing the message to all group members
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        announcement = (f"Message ID: {self.available_groups['public'].max_idx()}\n"
+        announcement = (f"Message ID: {self.groups['public'].max_idx()}\n"
                         f"From: {self.username}\n"
                         f"Time: {now}\n"
-                        f"Subject: {message_subject}\n")
-        self._announce(announcement, self.available_groups["public"].users, self.username)
+                        f"Subject: {message_subject}\n"
+                        f"<END>")
+        self._announce(announcement, self.groups["public"].users, self.username)
 
     def users(self):
         # Displaying the users within the public group
@@ -203,10 +252,35 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
             self.request.sendall(users.encode())
             return
 
+    def group_users(self, groupname: str):
+        # TODO: This sends nothing if the user is in no groups
+
+        # Displaying the users within a group
+        users = ("\n".join(self.groups[groupname].users))
+        users = users + "<END>"
+        if users:
+            self.request.sendall(users.encode())
+            return
+
+    def group_users(self, groupname: str):
+        # TODO: This sends nothing if the user is in no groups
+
+        # Displaying the users within a group
+        users = ("\n".join(self.groups[groupname].users))
+        users = users + "<END>"
+        if users:
+            self.request.sendall(users.encode())
+            return
+
     def leave(self):
-        # Leaving the public group
+        # Leaving a group
         self._leave("public")
-        self.request.sendall("Successfully left group 'public'<END>".encode())
+        self.request.sendall(f"Successfully left the group 'public'<END>".encode())
+
+    def group_leave(self, groupname: str):
+        # Leaving a group
+        self._leave(groupname)
+        self.request.sendall(f"Successfully left {groupname}<END>".encode())
         announcement = f"{self.username} has left the public group!\n"
         self._announce(announcement, self.available_groups["public"].users, self.username)
 
@@ -215,17 +289,9 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         if self.username not in self.available_groups[groupname].users:
             return
         with self.group_lock:
-            self.available_groups[groupname].users.remove(self.username)
-        self.message_cutoff[groupname] = -2
-
-    def groups(self):
-        message = []
-        for g_key, g_id in zip(self.available_groups, self.group_ids):
-            message.append(f"Group name: {g_key}, Group ID: {g_id}")
-
-        message = "\n".join(message)
-        message += "<END>"
-        self.request.sendall(message.encode())
+            for g in self.my_groups:
+                self.groups[g].users.remove(self.username)
+        self.message_cutoff["public"] = -2
 
     # TODO: Add clean-up method to remove users not in the server from all groups (I think?)
 
