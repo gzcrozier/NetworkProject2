@@ -6,7 +6,7 @@ public class SocketClient {
     private BufferedInputStream in;
     private PrintWriter out;
 
-    public SocketClient(String ip, int port) {
+    public SocketClient(String ip, int port, boolean doInitialRead) {
         // Connect to the server
         try {
             this.socket = new Socket(ip, port);
@@ -17,10 +17,12 @@ public class SocketClient {
             this.close();
         }
         // Read the initial message from the server
-        try {
-            System.out.println(readMessage());
-        } catch (IOException e) {
-            System.err.println("Connection error: " + e.getMessage());
+        if (doInitialRead) {
+            try {
+                System.out.println(readMessage());
+            } catch (IOException e) {
+                System.err.println("Connection error: " + e.getMessage());
+            }
         }
     }
 
@@ -106,7 +108,7 @@ public class SocketClient {
     }
 
     public static void main(String[] args) {
-        SocketClient client = new SocketClient("localhost", 9999);
+        SocketClient client = new SocketClient("localhost", 9999, true);
         client.loop();
         client.close();
     }
