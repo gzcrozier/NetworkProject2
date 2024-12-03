@@ -1,5 +1,5 @@
 from datetime import datetime
-from functools import partial
+from functools import partialmethod
 from typing import List, Optional, Set, Dict, Tuple, Sequence
 from socketserver import ThreadingMixIn, TCPServer, BaseRequestHandler, BaseServer
 import threading
@@ -28,6 +28,10 @@ class Group:
         return max(len(self) - 1, 0)
 
 
+class GroupError(Exception):
+    pass
+
+
 class ThreadedTCPServer(ThreadingMixIn, TCPServer):
     pass
 
@@ -44,8 +48,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         "group5": Group("group5"),
     }
     # Adding IDs as keys to the group dict, pointing to the same groups
-    group_ids = {str(i): v for i, (_, v) in enumerate(available_groups.items())}
-    available_groups |= group_ids
+    group_ids = {str(i): k for i, k in enumerate(available_groups)}
 
     # Define the list to store our server's users. This lock will be used to ensure no simultaneous access.
     user_lock = threading.Lock()
@@ -110,6 +113,8 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
                 except TypeError:
                     # If the arguments to the command are invalid
                     self.request.sendall(f"Invalid arguments for {method}!<END>".encode())
+                except GroupError:
+                    self.request.sendall(f"Group does not exist!<END>".encode())
                 except Exception:
                     # If some other error occurred (typically inside the command's function)
                     # TODO: Provide a more useful error message to help the client out?
@@ -132,13 +137,25 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
                 continue
             self.clients[user].request.sendall(f"{message}<END>".encode())
 
-    # join = partial(lf.groupjoin)
-    def join(self):
-        # Joining the public group
-        self.groupjoin("public")
+    def get_group(self, groupname: str) -> str:
+        try:
+            # Try to use groupname to index into available_groups
+            self.available_groups[groupname]
+        except KeyError:
+            try:
+                # The name is an ID, indexing into IDs then available
+                groupname = self.group_ids[groupname]
+                # Make sure this name actually exists, otherwise error
+                self.available_groups[groupname]
+            except KeyError:
+                raise GroupError
+
+        return groupname
 
     def groupjoin(self, groupname: str):
+        # TODO: Logic for if group does not exist
         # Joining a group
+        groupname = self.get_group(groupname)
         with self.group_lock:
             self.available_groups[groupname].add_user(self.username)
 
@@ -150,13 +167,12 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         self._announce(f"{self.username} has joined {groupname}!",
                        self.available_groups[groupname].users,
                        self.username)
-        
-    def message(self, message_idx: int):
-        # Displaying messages for the public group
-        self.groupmessage("public", message_idx)
 
+    join = partialmethod(groupjoin, groupname="public")
+        
     def groupmessage(self, groupname: str, message_idx: int):
         # Displaying messages
+        groupname = self.get_group(groupname)
         message_idx = int(message_idx)
         if self.message_cutoff[groupname] < -1:
             # The user is not a part of the group
@@ -173,12 +189,11 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         body = self.available_groups[groupname][message_idx]
         self.request.send(f"{body}<END>".encode())
 
-    def post(self):
-        # Posting to the public bulletin
-        self.grouppost("public")
+    message = partialmethod(groupmessage, "public")
 
     def grouppost(self, groupname: str):
         # Posting to a bulletin
+        groupname = self.get_group(groupname)
         # TODO: Find out all how to send all necessary broadcast info to all users
         if self.username not in self.available_groups[groupname].users:
             # The user is not in the group
@@ -206,11 +221,11 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
                         f"<END>")
         self._announce(announcement, self.available_groups[groupname].users, self.username)
 
-    def users(self):
-        self.groupusers("public")
+    post = partialmethod(grouppost, "public")
 
     def groupusers(self, groupname: str):
         # TODO: This sends nothing if the user is in no groups
+        groupname = self.get_group(groupname)
 
         # Displaying the users within a group
         users = ("\n".join(self.available_groups[groupname].users))
@@ -219,17 +234,29 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
             self.request.sendall(users.encode())
             return
 
-    def leave(self):
-        self.groupleave("public")
+    users = partialmethod(groupusers, "public")
+
+    def groups(self):
+        message = []
+        for g_key, g_id in zip(self.available_groups, self.group_ids):
+            message.append(f"Group name: {g_key}, Group ID: {g_id}")
+
+        message = "\n".join(message)
+        message += "<END>"
+        self.request.sendall(message.encode())
 
     def groupleave(self, groupname: str):
+        groupname = self.get_group(groupname)
         # Leaving a group
         self._leave(groupname)
         self.request.sendall(f"Successfully left '{groupname}'<END>".encode())
-        announcement = f"{self.username} has left the public group!\n"
+        announcement = f"{self.username} has left the {groupname} group!\n"
         self._announce(announcement, self.available_groups[groupname].users, self.username)
 
+    leave = partialmethod(groupleave, "public")
+
     def _leave(self, groupname: str):
+        groupname = self.get_group(groupname)
         # Leaving a group
         if self.username not in self.available_groups[groupname].users:
             return
