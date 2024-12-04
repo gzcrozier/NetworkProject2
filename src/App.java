@@ -6,7 +6,7 @@ import java.util.HashMap;
 public class App {
     public static void main(String[] args) {
         // Create an instance of the client.
-        SocketClient client = new SocketClient("localhost", 9999, false);
+        SocketClient client = new SocketClient("localhost", 9998, false);
 
         // Create a new instance of the GUI and put it on the screen.
         Gui gui = new Gui(1280, 720);
@@ -29,18 +29,11 @@ public class App {
             try {
                 client.sendMessage(name);
                 response = client.readMessage();
-                System.out.println(response);
             } catch (IOException e) {
                 System.err.println("Error sending the message to the server: " + e.getMessage());
             }
         } while (name == null || name.isBlank() || response == null || response.contains("please choose another username"));
-
-        // Get the welcome message from the server.
-        try {
-            gui.setWelcome(client.readMessage());
-        } catch (IOException e) {
-            System.err.println("Error reading the message from the server: " + e.getMessage());
-        }
+        gui.setWelcome(response);
 
         // Get the groups before the user joins any of them so there is no chance of them recieving any other message in the meantine.
         try {
@@ -48,11 +41,11 @@ public class App {
             ArrayList<HashMap<String, Object>> groupDicts = parseGroups(client.readMessage());
             gui.setGroups(groupDicts, client);
         } catch (IOException e) {
-            System.out.println("Unable to get groups" + e.getMessage());
+            System.err.println("Unable to get groups" + e.getMessage());
         }
 
         // Active the listening thread to handle the remaining application behavior.
-        gui.startListenerThread(client);
+        gui.startListenerThread(client, gui);
     }
 
     public static ArrayList<HashMap<String, Object>> parseGroups(String response) {

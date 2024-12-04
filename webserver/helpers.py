@@ -171,10 +171,10 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         with self.group_lock:
             group.add_user(self.username)
 
-        # Allowing the user to access the last and second to last most recently added bulletin messages
-        self.my_groups.add(groupname)
-        self.message_cutoff[groupname] = group.max_idx() - 1
-        self.request.sendall(f"You have joined {groupname}! <END>".encode())
+            # Allowing the user to access the last and second to last most recently added bulletin messages
+            self.my_groups.add(groupname)
+            self.message_cutoff[groupname] = group.max_idx() - 1
+            self.request.sendall(f"You have joined {groupname}! <END>".encode())
 
         self._announce(f"{self.username} has joined {groupname}!", group.users, self.username)
 
@@ -226,6 +226,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         # Announcing the message to all group members
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         announcement = (f"Message ID: {message_idx}\n"
+                        f"Group : {group}\n"
                         f"From: {self.username}\n"
                         f"Time: {now}\n"
                         f"Subject: {message_subject}\n"

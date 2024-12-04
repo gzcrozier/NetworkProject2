@@ -60,7 +60,7 @@ public class SocketClient {
             // Thread to listen for announcments, interrupt exectuion, display them, and continue
             try {
                 while (true) {
-                    String serverMessage = readMessage();
+                    String serverMessage = readMessage().replaceAll("\t", "");
                     if (serverMessage == null) continue; 
                     System.out.println("\n" + serverMessage);
                     System.out.print("> "); // Reprint prompt for user input
