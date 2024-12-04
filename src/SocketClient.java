@@ -123,6 +123,11 @@ public class SocketClient {
             try {
                 System.out.print("> "); // Prompt for user to connect to the server
                 message = consoleReader.readLine();
+                if (!(message.split(" ")[0].equalsIgnoreCase("connect"))) {
+                    System.out.println("Unknown command: " + message + ".");
+                    message = "";
+                    continue;
+                }
             }
             catch (IOException e) {
                 System.err.println("Could not read command: " + e.getMessage());

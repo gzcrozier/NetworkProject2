@@ -57,6 +57,13 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
     # Adding IDs as keys to the group dict, pointing to the same groups
     group_ids = {str(i): k for i, k in enumerate(available_groups)}
 
+    available_groups["public"].add_message("Message 1 Body")
+    available_groups["public"].add_message("Message 2 Body")
+    available_groups["public"].add_message("Message 3 Body")
+    available_groups["group2"].add_message("Message 1 Body")
+    available_groups["group2"].add_message("Message 2 Body")
+    available_groups["group2"].add_message("Message 3 Body")
+
     # Define the list to store our server's users. This lock will be used to ensure no simultaneous access.
     user_lock = threading.Lock()
     server_users: Set[str] = set()
@@ -177,7 +184,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         # Displaying messages
         group, groupname = self.get_group(groupname)
         message_idx = int(message_idx)
-        if self.message_cutoff[groupname] < -1:
+        if self.username not in group.users:
             # The user is not a part of the group
             self.request.sendall(f"Cannot access messages from {groupname}. Consider joining the group?<END>".encode())
             return
