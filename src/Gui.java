@@ -1,11 +1,12 @@
 import javax.swing.*;
 import java.awt.*;
-import javax.swing.event.ChangeListener;
-import javax.swing.event.ChangeEvent;
+import java.util.Scanner;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Vector;
 
 public class Gui {
     private JFrame frame;
@@ -17,9 +18,10 @@ public class Gui {
     private JMenu groupMenu;
     private JCheckBoxMenuItem[] groupCheckBoxMenuItems;
 
+    private int selectedGroupIndex;
     private JTabbedPane tabSelector;
     private JPanel[] groupPanels;
-    private String[][] groupMessages;
+    private HashMap<String, Vector<String>> groupMessageDict;
 
     private JTextField input;
     private JTextArea primaryTextArea;
@@ -40,6 +42,8 @@ public class Gui {
         this.frame.setJMenuBar(menuBar);
 
         this.tabSelector = new JTabbedPane();
+        this.groupMessageDict = new HashMap<String, Vector<String>>();
+
         this.centralPanel = new JPanel();
         this.centralPanel.setLayout(new BoxLayout(centralPanel, BoxLayout.Y_AXIS));
 
@@ -63,6 +67,33 @@ public class Gui {
         this.centralPanel.add(this.tabSelector);
 
         this.frame.add(centralPanel, BorderLayout.CENTER);
+    }
+
+    public void startListenerThread(SocketClient client) {
+        Thread serverListener = new Thread(() -> {
+            // Thread to listen for announcments and display them, then continue
+            try {
+                while (true) {
+                    String serverMessage = client.readMessage();
+                    if (serverMessage == null) continue; 
+                    if (serverMessage.startsWith("You have joined ")) client.sendMessage("usergroupinfo " + serverMessage.substring(16, serverMessage.indexOf("!")));
+                    else if (serverMessage.startsWith("Group: ")) {
+                        String[] parts = serverMessage.split("\n");
+                        String group = parts[0].split(": ")[1];
+                        String usersString = parts[1].split(": ")[1];
+                        String[] users = usersString.substring(1, usersString.length() - 1).split(", ");
+                        int numMessages = Integer.parseInt(parts[2].split(": ")[1].strip());
+                        int cutoff = Integer.parseInt(parts[3].split(": ")[1].strip());
+                        
+                        for (int i = cutoff; i < numMessages; i++) client.sendMessage("groupmessage " + group + " " + Integer.toString(i));
+                    }
+                    else System.out.println("====================" + serverMessage);
+                }
+            } catch (IOException e) {
+                System.err.println("Error reading from server: " + e.getMessage());
+            }
+        });
+        serverListener.start();
     }
 
     public void show() {
@@ -90,38 +121,24 @@ public class Gui {
             JPanel panel = new JPanel();
             panel.setVisible(false);
             this.groupPanels[i] = panel;
+            this.groupMessageDict.put(name, new Vector<String>());
 
             item.addActionListener(new ActionListener() {
                 @Override
                 public void actionPerformed(ActionEvent e) {
                     // If we get to this point in code some change was made to the menu and we need to update displayed tabs.
-                    if (item.isSelected()) {
-                        tabSelector.add(index + ": " + name, panel);
-                        client.communicate("groupjoin" + index);
-                    }
-                    else {
-                        tabSelector.remove(panel);
-                        client.communicate("groupleave" + index);
-                    }
-                }
-            });
-
-            JPanel[] currentPanels = this.groupPanels;
-            this.tabSelector.addChangeListener(new ChangeListener() {
-                @Override
-                public void stateChanged(ChangeEvent e) {
-                    JPanel selectedPanel = (JPanel) tabSelector.getSelectedComponent();
-                    int selectedIndex = -1;
-                    for (int i = 0; i < currentPanels.length; i++) {
-                        if (currentPanels[i] == selectedPanel) {
-                            selectedIndex = i;
-                            break;
+                    try {
+                        if (item.isSelected()) {
+                            tabSelector.add(index + ": " + name, panel);
+                            client.sendMessage("groupjoin " + index);
                         }
+                        else {
+                            tabSelector.remove(panel);
+                            client.sendMessage("groupleave " + index);
+                        }
+                    } catch (IOException d) {
+                        System.err.println("Error sending server group change. " + d.getMessage());
                     }
-                    if (selectedIndex == -1) {
-                        System.err.println("Selected index: " + selectedIndex + " Unable to parse");
-                    }
-                    System.out.println(client.communicate("usergroupinfo " + index));
                 }
             });
         }

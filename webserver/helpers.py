@@ -259,7 +259,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
                 f"Group: {groupname}\n"\
                 f"Users: [{', '.join(group.users)}]\n"\
                 f"Messages: {len(group)}\n"\
-                f"Cutoff: {self.message_cutoff[groupname]}\n"
+                f"Cutoff: {self.message_cutoff[groupname]}\n<END>"
             )
             self.request.sendall(message.encode())
 

@@ -13,7 +13,7 @@ public class App {
         gui.show();
 
         // Get the prompt message from the server.
-        String promptMessage, name;
+        String promptMessage, name, response = null;
         do {
             try {
                 promptMessage = client.readMessage();
@@ -26,14 +26,14 @@ public class App {
         // Setup and get our username to answer the server.
         do {
             name = gui.getUsername(promptMessage);
-        } while (name == null || name.isBlank() || name.endsWith("please choose another username"));
-
-        // Send the username to the server.
-        try {
-            client.sendMessage(name);
-        } catch (IOException e) {
-            System.err.println("Error sending the message to the server: " + e.getMessage());
-        }
+            try {
+                client.sendMessage(name);
+                response = client.readMessage();
+                System.out.println(response);
+            } catch (IOException e) {
+                System.err.println("Error sending the message to the server: " + e.getMessage());
+            }
+        } while (name == null || name.isBlank() || response == null || response.contains("please choose another username"));
 
         // Get the welcome message from the server.
         try {
@@ -42,14 +42,20 @@ public class App {
             System.err.println("Error reading the message from the server: " + e.getMessage());
         }
 
-        // Get the groups from the server and parse them.
-        ArrayList<HashMap<String, Object>> groupDicts = getGroups(client.communicate("groups"));
+        // Get the groups before the user joins any of them so there is no chance of them recieving any other message in the meantine.
+        try {
+            client.sendMessage("groups");
+            ArrayList<HashMap<String, Object>> groupDicts = parseGroups(client.readMessage());
+            gui.setGroups(groupDicts, client);
+        } catch (IOException e) {
+            System.out.println("Unable to get groups" + e.getMessage());
+        }
 
-        // Set the application groups.
-        gui.setGroups(groupDicts, client);
+        // Active the listening thread to handle the remaining application behavior.
+        gui.startListenerThread(client);
     }
 
-    public static ArrayList<HashMap<String, Object>> getGroups(String response) {
+    public static ArrayList<HashMap<String, Object>> parseGroups(String response) {
         ArrayList<HashMap<String, Object>> groups = new ArrayList<>();
         String[] lines = response.split("\n");
         // Loop through all the lines of the response and store the information in dictionaries.

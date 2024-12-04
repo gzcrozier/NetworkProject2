@@ -51,20 +51,6 @@ public class SocketClient {
         this.out.println(s);
     }
 
-    public String communicate(String message) {
-        try {
-            this.sendMessage(message);
-        } catch (IOException e) {
-            System.err.println("Error sending the message to the server: " + e.getMessage());
-        }
-        try {
-            return this.readMessage();
-        } catch (IOException e) {
-            System.err.println("Error reading the message from the server: " + e.getMessage());
-        }
-        return null;
-    }
-
     public void loop() {
         String message;
         BufferedReader consoleReader = new BufferedReader((new InputStreamReader(System.in)));
