@@ -7,28 +7,35 @@ from socket import socket as Socket
 
 
 class Group:
+    """Class that holds information about a messaging group."""
     def __init__(self, name):
         self.name = name
         self.bulletin: List[str] = []
         self.users: Set[str] = set()
 
-    def add_user(self, username):
+    def add_user(self, username: str):
+        # Adds a user to the group
         self.users.add(username)
 
     def add_message(self, message: str):
+        # Adds a message to the bulletin
         self.bulletin.append(message)
 
     def __getitem__(self, message_idx: int) -> str:
+        # Gets a message from the bulletin
         return self.bulletin[message_idx]
 
     def __len__(self) -> int:
         return len(self.bulletin)
 
     def max_idx(self) -> int:
+        # Gets the index of the last message in the bulletin, useful for user only being able to access 2 most recent
+        # messages upon joining
         return max(len(self) - 1, 0)
 
 
 class GroupError(Exception):
+    # Custom exception to be raised and handled when the user does something with a group that does not exist.
     pass
 
 
@@ -61,11 +68,6 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
     username: Optional[str]
     clients: Dict[str, "ThreadedTCPRequestHandler"] = {}
     client_lock = threading.Lock()
-
-    # TODO: Remove these, they are used for testing
-    available_groups["public"].add_message("Message 0 Body")
-    available_groups["public"].add_message("Message 1 Body")
-    available_groups["public"].add_message("Message 2 Body")
 
     def __init__(self, request: Socket, client_address, server: BaseServer):
         super().__init__(request, client_address, server)
@@ -155,6 +157,10 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         # TODO: Logic for if group does not exist
         # Joining a group
         group, groupname = self.get_group(groupname)
+        if self.username in group.users:
+            self.request.sendall(f"You are already in {groupname}!<END>".encode())
+            return
+
         with self.group_lock:
             group.add_user(self.username)
 
@@ -216,6 +222,7 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
                         f"From: {self.username}\n"
                         f"Time: {now}\n"
                         f"Subject: {message_subject}\n"
+                        f"Group: {groupname}\n"
                         f"<END>")
         self._announce(announcement, group.users, self.username)
 

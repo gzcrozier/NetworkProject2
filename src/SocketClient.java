@@ -52,11 +52,12 @@ public class SocketClient {
     }
 
     public void loop() {
+        // Main processing loop for sending and receiving messages with the server
         String message;
         BufferedReader consoleReader = new BufferedReader((new InputStreamReader(System.in)));
 
         Thread serverListener = new Thread(() -> {
-            // Thread to listen for announcments and display them, then continue
+            // Thread to listen for announcments, interrupt exectuion, display them, and continue
             try {
                 while (true) {
                     String serverMessage = readMessage();
@@ -65,14 +66,15 @@ public class SocketClient {
                     System.out.print("> "); // Reprint prompt for user input
                 }
             } catch (IOException e) {
-                System.err.println("Error reading from server: " + e.getMessage());
+                System.err.println("You left the server.");
+                System.out.print("> ");
             }
         });
 
         serverListener.start();
 
         try {
-            System.out.print("> ");
+            System.out.print("> "); // Prompt for user to enter commands
             while (true) {
                 // Read a line (command) from the terminal.
                 message = consoleReader.readLine();
@@ -85,7 +87,7 @@ public class SocketClient {
                     break;
                 }
 
-                // If we get to this point the user gave a command we need to send to the server.
+                // If we get to this point the user gave a command we need to send to the server, sending.
                 this.sendMessage(message);
             }
         } catch (IOException e) {
@@ -94,6 +96,7 @@ public class SocketClient {
     }
 
     public void close() {
+        // Close the connection
         try {
             this.in.close();
         } catch (IOException e) {
@@ -108,8 +111,48 @@ public class SocketClient {
     }
 
     public static void main(String[] args) {
-        SocketClient client = new SocketClient("localhost", 9999, true);
+        while (true) {
+        String message = "";
+        String ip = "";
+        int port = 0;
+        SocketClient client = null;
+
+        BufferedReader consoleReader = new BufferedReader((new InputStreamReader(System.in)));
+        while (!(message.split(" ")[0].equalsIgnoreCase("connect"))) {
+            // Waiting for the user to input "connect"
+            try {
+                System.out.print("> "); // Prompt for user to connect to the server
+                message = consoleReader.readLine();
+            }
+            catch (IOException e) {
+                System.err.println("Could not read command: " + e.getMessage());
+                message = "";
+                continue;
+            }
+
+            try {    
+                // Try to extract the ip and port number from the connect command
+                ip = message.split(" ")[1];
+                port = Integer.parseInt(message.split(" ")[2]);
+            }
+            catch (IndexOutOfBoundsException e) {
+                System.err.println("'connect' expects IP address and port number.");
+                message = "";
+                continue;
+            }
+
+            try {
+                // Try to instantiate the client
+                client = new SocketClient(ip, port, true);
+            } 
+            catch (Exception e) {
+                client = null;
+                System.err.println("Could not connect to the server!");
+                message = "";
+            }
+        }
         client.loop();
         client.close();
+    }
     }
 }
